@@ -13,8 +13,14 @@
 #include <spawn.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <time.h>
+#ifdef __MACH__
+#include <CoreServices/CoreServices.h>
+#include <mach/mach.h>
+#include <mach/mach_time.h>
+#else
 #include <sys/time.h>
+#endif
+#include <time.h>
 #include <sys/resource.h>
 
 extern char **environ; // MY EYES ARE ON FIRE!
@@ -135,6 +141,8 @@ static void usage(FILE* f) {
 	fprintf(f, "  \\\\  Print a literal \\ character\n");
 }
 
+#ifdef __MACH__
+#else
 static uint64_t ts_get_elapsed_ns(struct timespec* before, struct timespec* after) {
 	uint64_t result = after->tv_sec - before->tv_sec;
 	result *= 1000*1000*1000; // nanoseconds
@@ -146,6 +154,7 @@ static uint64_t ts_get_elapsed_ns(struct timespec* before, struct timespec* afte
 	}
 	return result;
 }
+#endif
 
 static uint64_t tv_get_elapsed_us(struct timeval* before, struct timeval* after) {
 	uint64_t result = after->tv_sec - before->tv_sec;
@@ -327,16 +336,37 @@ int main(int argc, char** argv) {
 		return RC_ARGUMENT_PARSING;
 	}
 
+	// The clang version used on OSX warns on `= {0}` for some idiotic reason
+	resources_t resources = {
+		.real_ns = 0,
+		.user_ns = 0,
+		.sys_ns = 0,
+		.minor_pagefaults = 0,
+		.major_pagefaults = 0,
+		.voluntary_ctxt_switches = 0,
+		.involuntary_ctxt_switches = 0,
+	};
+
 	struct rusage ru_before;
 	if(getrusage(RUSAGE_CHILDREN, &ru_before)) {
 		fprintf(stderr, "Cannot get resource usage...\n");
 		return RC_RUSAGE;
 	}
+
+	#ifdef __MACH__
+	struct mach_timebase_info abs_info;
+	mach_timebase_info(&abs_info);
+	if(abs_info.denom != 1) {
+		fprintf(stderr, "Warning: Real time computation might overflow quickly on this machine.\n");
+	}
+	uint64_t abs_before = mach_absolute_time();
+	#else
 	struct timespec ts_before;
 	if(clock_gettime(CLOCK_MONOTONIC_RAW, &ts_before)) {
 		fprintf(stderr, "Cannot get time...\n");
 		return RC_TIME;
 	}
+	#endif
 
 	pid_t child;
 	if(posix_spawnp(&child, argv[0], NULL, NULL, argv, environ)) {
@@ -359,26 +389,34 @@ int main(int argc, char** argv) {
 		}
 	}
 
+	#ifdef __MACH__
+	uint64_t abs_after = mach_absolute_time();
+	resources.real_ns = (abs_after - abs_before) * abs_info.numer / abs_info.denom;
+	#else
 	struct timespec ts_after;
 	if(clock_gettime(CLOCK_MONOTONIC_RAW, &ts_after)) {
 		fprintf(stderr, "Cannot get time...\n");
 		return RC_TIME;
 	}
+	resources.real_ns = ts_get_elapsed_ns(&ts_before, &ts_after);
+	#endif
+
 	struct rusage ru_after;
 	if(getrusage(RUSAGE_CHILDREN, &ru_after)) {
 		fprintf(stderr, "Cannot get resource usage...\n");
 		return RC_RUSAGE;
 	}
 
-	resources_t resources = {
-		.real_ns = ts_get_elapsed_ns(&ts_before, &ts_after),
-		.user_ns = tv_get_elapsed_us(&ru_before.ru_utime, &ru_after.ru_utime) * 1000,
-		.sys_ns = tv_get_elapsed_us(&ru_before.ru_stime, &ru_after.ru_stime) * 1000,
-		.minor_pagefaults = ru_after.ru_minflt - ru_before.ru_minflt,
-		.major_pagefaults = ru_after.ru_majflt - ru_before.ru_majflt,
-		.voluntary_ctxt_switches = ru_after.ru_nvcsw - ru_before.ru_nvcsw,
-		.involuntary_ctxt_switches = ru_after.ru_nivcsw - ru_before.ru_nivcsw,
-	};
+	resources.user_ns = tv_get_elapsed_us(&ru_before.ru_utime, &ru_after.ru_utime) * 1000;
+	resources.sys_ns = tv_get_elapsed_us(&ru_before.ru_stime, &ru_after.ru_stime) * 1000;
+
+	#ifdef __MACH__
+	#else
+	resources.minor_pagefaults = ru_after.ru_minflt - ru_before.ru_minflt;
+	resources.major_pagefaults = ru_after.ru_majflt - ru_before.ru_majflt;
+	resources.voluntary_ctxt_switches = ru_after.ru_nvcsw - ru_before.ru_nvcsw;
+	resources.involuntary_ctxt_switches = ru_after.ru_nivcsw - ru_before.ru_nivcsw;
+	#endif
 
 	resources_fprintf(stdout, opts.format, &resources);
 
