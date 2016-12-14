@@ -23,6 +23,14 @@
 #include <time.h>
 #include <sys/resource.h>
 
+#ifndef VERSION
+#define VERSION_STRING "unknown"
+#else
+#define STRINGIFY2(x) #x
+#define STRINGIFY(x) STRINGIFY2(x)
+#define VERSION_STRING STRINGIFY(VERSION)
+#endif
+
 extern char **environ; // MY EYES ARE ON FIRE!
 
 enum rc {
@@ -38,11 +46,12 @@ enum rc {
 static struct {
 	char const* name;
 	char const* format;
-	bool help;
+	bool help, version;
 } opts = {
 	.name = "timer",
 	.format = "\nreal %r\nuser %u\nsys  %s\nmem  %R\n",
-	.help = false
+	.help = false,
+	.version = false
 };
 
 static char const* const portable_format = "real %pr\nuser %pu\nsys %ps\n";
@@ -70,30 +79,36 @@ static bool parse_opts(int* argc, char** argv) {
 					stop = true;
 				} else if(strcmp("complete", arg + 2) == 0) {
 					opts.format = complete_format;
-				} else if(strcmp("help", arg + 2) == 0) {
-					opts.help = true;
 				} else if(strcmp("format", arg + 2) == 0) {
 					if(++from >= *argc) return false;
 					opts.format = argv[from];
+				} else if(strcmp("help", arg + 2) == 0) {
+					opts.help = true;
 				} else if(strcmp("portability", arg + 2) == 0) {
 					opts.format = portable_format;
+				} else if(strcmp("version", arg + 2) == 0) {
+					opts.version = true;
 				} else return false;
 			} else if(arg[1] == 'c') {
 				if(arg[2] == '\0') {
 					opts.format = complete_format;
-				} else return false;
-			} else if(arg[1] == 'h') {
-				if(arg[2] == '\0') {
-					opts.help = true;
 				} else return false;
 			} else if(arg[1] == 'f') {
 				if(arg[2] == '\0') {
 					if(++from >= *argc) return false;
 					opts.format = argv[from];
 				} else return false;
+			} else if(arg[1] == 'h') {
+				if(arg[2] == '\0') {
+					opts.help = true;
+				} else return false;
 			} else if(arg[1] == 'p') {
 				if(arg[2] == '\0') {
 					opts.format = portable_format;
+				} else return false;
+			} else if(arg[1] == 'v') {
+				if(arg[2] == '\0') {
+					opts.version = true;
 				} else return false;
 			} else return false;
 		} else {
@@ -103,7 +118,11 @@ static bool parse_opts(int* argc, char** argv) {
 	}
 	argv[to] = NULL;
 	*argc = to;
-	return *argc > 0;
+	return opts.help || opts.version || *argc > 0;
+}
+
+static void version(FILE* f) {
+	fprintf(f, "timer version " VERSION_STRING "\n");
 }
 
 static void usage(FILE* f) {
@@ -112,6 +131,7 @@ static void usage(FILE* f) {
 	fprintf(f, "\n");
 	fprintf(f, "Options:\n");
 	fprintf(f, "  --                         Stop parsing Arguments (useful to call commands whose name starts with '-')\n");
+	fprintf(f, "  -v --version               Show version info (timer version " VERSION_STRING "), then exit\n");
 	fprintf(f, "  -h --help                  Show this help, then exit\n");
 	fprintf(f, "  -c --complete              Give a complete resource usage report\n");
 	fprintf(f, "  -f --format S              Use the format string S for the report\n");
@@ -407,6 +427,9 @@ int main(int argc, char** argv) {
 		return RC_ARGUMENT_PARSING;
 	} else if(opts.help) {
 		usage(stdout);
+		return RC_SUCCESS;
+	} else if(opts.version) {
+		version(stdout);
 		return RC_SUCCESS;
 	} else if(!check_format(opts.format)) {
 		fprintf(stderr, "The given format string is not a legal format string.\nUse '%s -h' for more information.\n", opts.name);

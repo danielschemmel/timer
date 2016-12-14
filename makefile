@@ -9,6 +9,9 @@ OPTS := -std=c11 -Wall -Wextra -pedantic $(WERROR) -D_POSIX_C_SOURCE=200809L -D_
 LIBS := 
 
 SRC := $(shell find . -path ./obj -prune -o -name "'.?*'" -prune -o -iname \*.c -print)
+VERSION := $(shell echo "$$(git rev-list --count HEAD).$$(git rev-parse --short --verify HEAD)")
+DIRTY := $(shell if [[ -n "$$(git status --porcelain)" ]] ; then echo '.DIRTY' ; fi)
+OPTS += -DVERSION="$(VERSION)$(DIRTY)"
 
 clean : 
 	rm -rf obj
