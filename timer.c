@@ -41,7 +41,7 @@ static struct {
 	bool help;
 } opts = {
 	.name = "timer",
-	.format = "\nreal %r\nuser %u\nsys  %s\n",
+	.format = "\nreal %r\nuser %u\nsys  %s\nmem  %R\n",
 	.help = false
 };
 
@@ -51,6 +51,7 @@ static char const* const complete_format = "\n"
 	"real %r\n"
 	"user %u\n"
 	"sys  %s\n"
+	"maximum resident set %R\n"
 	"minor pagefaults %f\n"
 	"major pagefaults %F\n"
 	"voluntary context switches   %c\n"
@@ -129,6 +130,7 @@ static void usage(FILE* f) {
 	fprintf(f, "  %%[hmMp]r  Real time elapsed\n");
 	fprintf(f, "  %%[hmMp]u  User time elapsed\n");
 	fprintf(f, "  %%[hmMp]s  System time elapsed\n");
+	fprintf(f, "  %%[hmM]R   Maximum resident set size\n");
 	fprintf(f, "  %%[hmM]f   Minor (recoverable) page faults\n");
 	fprintf(f, "  %%[hmM]F   Major (unrecoverable) page faults\n");
 	fprintf(f, "  %%%%        Print a literal %% sign\n");
@@ -170,6 +172,7 @@ static uint64_t tv_get_elapsed_us(struct timeval* before, struct timeval* after)
 
 typedef struct resources_t {
 	uint64_t real_ns, user_ns, sys_ns;
+	uint64_t max_rss;
 	long minor_pagefaults, major_pagefaults;
 	long voluntary_ctxt_switches, involuntary_ctxt_switches;
 } resources_t;
@@ -194,8 +197,13 @@ static bool check_format(char const* format) {
 			if(option != '\0') c = *++format;
 
 			if(c == 'r') {
+				if(option != '\0' && !(option == 'h' || option == 'm' || option == 'M' || option == 'p')) return false;
 			} else if(c == 'u') {
+				if(option != '\0' && !(option == 'h' || option == 'm' || option == 'M' || option == 'p')) return false;
 			} else if(c == 's') {
+				if(option != '\0' && !(option == 'h' || option == 'm' || option == 'M' || option == 'p')) return false;
+			} else if(c == 'R') {
+				if(option != '\0' && !(option == 'h' || option == 'm' || option == 'M')) return false;
 			} else if(c == 'f') {
 				if(option != '\0' && !(option == 'h' || option == 'm' || option == 'M')) return false;
 			} else if(c == 'F') {
@@ -223,25 +231,33 @@ static void print_ns_h(FILE* f, uint64_t ns) {
 	if(ns < 1000) {
 		fprintf(f, "  %3u ns", (unsigned)(ns));
 	} else if(ns < 10000) {
-		fprintf(f, "%u.%03u us", (unsigned)((ns+500) / 1000), (unsigned)(ns % 1000));
+		fprintf(f, "%u.%03u us", (unsigned)(ns / 1000), (unsigned)(ns % 1000));
 	} else if(ns < 100000) {
-		fprintf(f, "%u.%02u us", (unsigned)((ns+500) / 1000), (unsigned)((ns+5) / 10 % 100));
+		ns = (ns + 5) / 10;
+		fprintf(f, "%u.%02u us", (unsigned)(ns / 100), (unsigned)(ns % 100));
 	} else if(ns < 1000000) {
-		fprintf(f, "%u.%01u us", (unsigned)((ns+500) / 1000), (unsigned)((ns+50) / 100 % 10));
+		ns = (ns + 50) / 100;
+		fprintf(f, "%u.%01u us", (unsigned)(ns / 10), (unsigned)(ns % 10));
 	} else if(ns < 10000000) {
-		fprintf(f, "%u.%03u ms", (unsigned)((ns+500000) / 1000000), (unsigned)((ns+500) / 1000 % 1000));
+		ns = (ns + 500) / 1000;
+		fprintf(f, "%u.%03u ms", (unsigned)(ns / 1000), (unsigned)(ns % 1000));
 	} else if(ns < 100000000) {
-		fprintf(f, "%u.%02u ms", (unsigned)((ns+500000) / 1000000), (unsigned)((ns+5000) / 10000 % 100));
+		ns = (ns + 5000) / 10000;
+		fprintf(f, "%u.%02u ms", (unsigned)(ns / 100), (unsigned)(ns % 100));
 	} else if(ns < 1000000000) {
-		fprintf(f, "%u.%01u ms", (unsigned)((ns+500000) / 1000000), (unsigned)((ns+50000) / 100000 % 10));
+		ns = (ns + 50000) / 100000;
+		fprintf(f, "%u.%01u ms", (unsigned)(ns / 10), (unsigned)(ns % 10));
 	} else if(ns < 10000000000) {
-		fprintf(f, "%u.%03u s", (unsigned)((ns+500000000) / 1000000000), (unsigned)((ns+500000) / 1000000 % 1000));
+		ns = (ns + 500000) / 1000000;
+		fprintf(f, "%u.%03u s", (unsigned)(ns / 1000), (unsigned)(ns % 1000));
 	} else if(ns < 100000000000) {
-		fprintf(f, "%u.%02u s", (unsigned)((ns+500000000) / 1000000000), (unsigned)((ns+5000000) / 10000000 % 100));
+		ns = (ns + 5000000) / 10000000;
+		fprintf(f, "%u.%02u s", (unsigned)(ns / 100), (unsigned)(ns % 100));
 	} else if(ns < 1000000000000) {
-		fprintf(f, "%u.%01u s", (unsigned)((ns+500000000) / 1000000000), (unsigned)((ns+50000000) / 100000000 % 10));
+		ns = (ns + 50000000) / 100000000;
+		fprintf(f, "%u.%01u s", (unsigned)(ns / 10), (unsigned)(ns % 10));
 	} else {
-		ns = (ns+500000000) / 1000000000;
+		ns = (ns + 500000000) / 1000000000;
 		uint64_t divisor = 1;
 		while(ns / 1000 >= divisor) divisor *= 1000;
 		fprintf(f, "%" PRIu64 " ", ns / divisor % 1000);
@@ -252,7 +268,7 @@ static void print_ns_h(FILE* f, uint64_t ns) {
 	}
 }
 
-static void print_ns(FILE* f, char const option, uint64_t const ns) {
+static void print_ns(FILE* f, char const option, uint64_t ns) {
 	if(option == '\0' || option == 'h') {
 		print_ns_h(f, ns);
 	} else if(option == 'm') {
@@ -261,7 +277,66 @@ static void print_ns(FILE* f, char const option, uint64_t const ns) {
 		fprintf(f, "%" PRIx64, ns);
 	} else {
 		assert(option == 'p');
-		fprintf(f, "%" PRIu64 ".%02u", (ns+5000000) / 1000000000, (unsigned)((ns+5000000) / 10000000 % 100));
+		ns = (ns + 50000000) / 100000000;
+		fprintf(f, "%" PRIu64 ".%02u", ns / 100, (unsigned)(ns % 100));
+	}
+}
+
+static void print_bytes_h(FILE* f, uint64_t bytes) {
+	if(bytes < 1000ull) {
+		fprintf(f, "  %3u B", (unsigned)(bytes));
+	} else if(bytes < 10240ull) {
+		fprintf(f, "%.2f KiB", bytes / 1024.0);
+	} else if(bytes < 102400ull) {
+		fprintf(f, "%.1f KiB", bytes / 1024.0);
+	} else if(bytes < 1024000ull) {
+		fprintf(f, "%.0f KiB", bytes / 1024.0);
+	} else if(bytes < 10485760ull) {
+		fprintf(f, "%.2f MiB", bytes / 1048576.0);
+	} else if(bytes < 104857600ull) {
+		fprintf(f, "%.1f MiB", bytes / 1048576.0);
+	} else if(bytes < 1048576000ull) {
+		fprintf(f, "%.0f MiB", bytes / 1048576.0);
+	} else if(bytes < 10737418240ull) {
+		fprintf(f, "%.2f GiB", bytes / 1073741824.0);
+	} else if(bytes < 107374182400ull) {
+		fprintf(f, "%.1f GiB", bytes / 1073741824.0);
+	} else if(bytes < 1073741824000ull) {
+		fprintf(f, "%.0f GiB", bytes / 1073741824.0);
+	} else if(bytes < 10995116277760ull) {
+		fprintf(f, "%.2f TiB", bytes / 1099511627776.0);
+	} else if(bytes < 109951162777600ull) {
+		fprintf(f, "%.1f TiB", bytes / 1099511627776.0);
+	} else if(bytes < 1099511627776000ull) {
+		fprintf(f, "%.0f TiB", bytes / 1099511627776.0);
+	} else if(bytes < 11258999068426240ull) {
+		fprintf(f, "%.2f PiB", bytes / 1125899906842624.0);
+	} else if(bytes < 112589990684262400ull) {
+		fprintf(f, "%.1f PiB", bytes / 1125899906842624.0);
+	} else if(bytes < 1125899906842624000ull) {
+		fprintf(f, "%.0f PiB", bytes / 1125899906842624.0);
+	} else if(bytes < 11529215046068469760ull) {
+		fprintf(f, "%.2f EiB", bytes / 1152921504606846976.0);
+	} else {
+		bytes = bytes / 1152921504606846976.0 + 0.5;
+		uint64_t divisor = 1;
+		while(bytes / 1000 >= divisor) divisor *= 1000;
+		fprintf(f, "%" PRIu64 " ", bytes / divisor % 1000);
+		for(divisor /= 1000; divisor; divisor /= 1000) {
+			fprintf(f, "%03" PRIu64 " ", bytes / divisor % 1000);
+		}
+		fprintf(f, "EiB");
+	}
+}
+
+static void print_bytes(FILE* f, char const option, uint64_t const bytes) {
+	if(option == '\0' || option == 'h') {
+		print_bytes_h(f, bytes);
+	} else if(option == 'm') {
+		fprintf(f, "%" PRIu64, bytes);
+	} else {
+		assert(option == 'M');
+		fprintf(f, "%" PRIx64, bytes);
 	}
 }
 
@@ -302,6 +377,8 @@ static void resources_fprintf(FILE* f, char const* format, resources_t* resource
 				print_ns(f, option, resources->user_ns);
 			} else if(c == 's') {
 				print_ns(f, option, resources->sys_ns);
+			} else if(c == 'R') {
+				print_bytes(f, option, resources->max_rss);
 			} else if(c == 'f') {
 				print_count(f, option, resources->minor_pagefaults);
 			} else if(c == 'F') {
@@ -341,6 +418,7 @@ int main(int argc, char** argv) {
 		.real_ns = 0,
 		.user_ns = 0,
 		.sys_ns = 0,
+		.max_rss = 0,
 		.minor_pagefaults = 0,
 		.major_pagefaults = 0,
 		.voluntary_ctxt_switches = 0,
@@ -412,6 +490,7 @@ int main(int argc, char** argv) {
 
 	#ifdef __MACH__
 	#else
+	resources.max_rss = ru_after.ru_maxrss;
 	resources.minor_pagefaults = ru_after.ru_minflt - ru_before.ru_minflt;
 	resources.major_pagefaults = ru_after.ru_majflt - ru_before.ru_majflt;
 	resources.voluntary_ctxt_switches = ru_after.ru_nvcsw - ru_before.ru_nvcsw;
