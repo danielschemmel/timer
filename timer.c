@@ -490,7 +490,8 @@ int main(int argc, char** argv) {
 
 	#ifdef __MACH__
 	#else
-	resources.max_rss = ru_after.ru_maxrss;
+	assert(ru_after.ru_maxrss == (ru_after.ru_maxrss * 1024) / 1024);
+	resources.max_rss = ru_after.ru_maxrss * 1024;
 	resources.minor_pagefaults = ru_after.ru_minflt - ru_before.ru_minflt;
 	resources.major_pagefaults = ru_after.ru_majflt - ru_before.ru_majflt;
 	resources.voluntary_ctxt_switches = ru_after.ru_nvcsw - ru_before.ru_nvcsw;
