@@ -5,7 +5,7 @@ OPTIMIZE := -O3
 
 COMPILER := cc
 WERROR := -Werror
-OPTS := -std=c11 -Wall -Wextra -pedantic $(WERROR) -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE=700 $(OPTIMIZE)
+OPTS := -std=c11 -Wall -Wextra -pedantic $(WERROR) -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE=700 -D_DARWIN_C_SOURCE $(OPTIMIZE)
 LIBS := 
 
 SRC := $(shell find . -path ./obj -prune -o -name "'.?*'" -prune -o -iname \*.c -print)

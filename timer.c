@@ -35,6 +35,7 @@ extern char **environ; // MY EYES ARE ON FIRE!
 enum rc {
 	RC_SUCCESS,
 	RC_ARGUMENT_PARSING,
+	RC_COMMAND_NOT_FOUND,
 	RC_SPAWN,
 	RC_WAIT,
 	RC_RUSAGE,
@@ -48,11 +49,7 @@ static struct {
 	bool help, version;
 } opts = {
 	.name = "timer",
-	#ifdef __MACH__
-	.format = "\nreal %r\nuser %u\nsys  %s\n",
-	#else
 	.format = "\nreal %r\nuser %u\nsys  %s\nmem  %R\n",
-	#endif
 	.help = false,
 	.version = false
 };
@@ -473,11 +470,12 @@ int main(int argc, char** argv) {
 	#endif
 
 	pid_t child;
-	if(posix_spawnp(&child, argv[0], NULL, NULL, argv, environ)) {
+	int rc;
+	errno = 0;
+	if((rc = posix_spawnp(&child, argv[0], NULL, NULL, argv, environ))) {
 		fprintf(stderr, "Cannot spawn child...\n");
 		return RC_SPAWN;
 	}
-	int rc;
 	for(;;) {
 		int status;
 		if(child != waitpid(child, &status, 0)) {
@@ -515,14 +513,16 @@ int main(int argc, char** argv) {
 	resources.sys_ns = tv_get_elapsed_us(&ru_before.ru_stime, &ru_after.ru_stime) * 1000;
 
 	#ifdef __MACH__
+	resources.max_rss = ru_after.ru_maxrss;
 	#else
 	assert(ru_after.ru_maxrss == (ru_after.ru_maxrss * 1024) / 1024);
 	resources.max_rss = ru_after.ru_maxrss * 1024;
+	#endif
+
 	resources.minor_pagefaults = ru_after.ru_minflt - ru_before.ru_minflt;
 	resources.major_pagefaults = ru_after.ru_majflt - ru_before.ru_majflt;
 	resources.voluntary_ctxt_switches = ru_after.ru_nvcsw - ru_before.ru_nvcsw;
 	resources.involuntary_ctxt_switches = ru_after.ru_nivcsw - ru_before.ru_nivcsw;
-	#endif
 
 	resources_fprintf(stdout, opts.format, &resources);
 
