@@ -17,10 +17,9 @@
 #include <CoreServices/CoreServices.h>
 #include <mach/mach.h>
 #include <mach/mach_time.h>
-#else
-#include <sys/time.h>
 #endif
 #include <time.h>
+#include <sys/time.h>
 #include <sys/resource.h>
 
 #ifndef VERSION
@@ -49,7 +48,11 @@ static struct {
 	bool help, version;
 } opts = {
 	.name = "timer",
+	#ifdef __MACH__
+	.format = "\nreal %r\nuser %u\nsys  %s\n",
+	#else
 	.format = "\nreal %r\nuser %u\nsys  %s\nmem  %R\n",
+	#endif
 	.help = false,
 	.version = false
 };
