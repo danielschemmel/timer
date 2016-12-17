@@ -130,20 +130,20 @@ static void usage(FILE* f) {
 	fprintf(f, "Watches resource utilization of 'command args'\n");
 	fprintf(f, "\n");
 	fprintf(f, "Options:\n");
-	fprintf(f, "  --                         Stop parsing Arguments (useful to call commands whose name starts with '-')\n");
-	fprintf(f, "  -v --version               Show version info (timer version " VERSION_STRING "), then exit\n");
-	fprintf(f, "  -h --help                  Show this help, then exit\n");
-	fprintf(f, "  -c --complete              Give a complete resource usage report\n");
-	fprintf(f, "  -f --format S              Use the format string S for the report\n");
-	fprintf(f, "  -p --portability           Use the portable format similar to that used by e.g. GNU time and bash time\n");
+	fprintf(f, "  --                Stop parsing Arguments (useful to call commands whose name starts with '-')\n");
+	fprintf(f, "  -c --complete     Give a complete resource usage report\n");
+	fprintf(f, "  -f --format S     Use the format string S for the report\n");
+	fprintf(f, "  -h --help         Show this help, then exit\n");
+	fprintf(f, "  -p --portability  Use the portable format similar to that used by e.g. GNU time and bash time\n");
+	fprintf(f, "  -v --version      Show version info (timer version " VERSION_STRING "), then exit\n");
 	fprintf(f, "\n");
 	fprintf(f, "Format Sequences:\n");
 	fprintf(f, "Any %% sign in the format string must be the start of a valid format sequence respectively. Escape sequences are of the form %%[options][specifier] where 'specifier' is required while 'options' is optional and will default to 'h'.\n");
 	fprintf(f, "\n");
 	fprintf(f, "Format Options:\n");
 	fprintf(f, "  h  Print in an unspecified way useful for human consumption (this is the default)\n");
-	fprintf(f, "  m  Print as a maximum-precision (nanoseconds for time, bytes for data sizes) decimal integral number\n");
-	fprintf(f, "  M  Print as a maximum-precision (nanoseconds for time, bytes for data sizes) hexadecimal integral number\n");
+	fprintf(f, "  m  Print as a maximum-precision (nanoseconds/bytes) decimal integral number\n");
+	fprintf(f, "  M  Print as a maximum-precision (nanoseconds/bytes) hexadecimal integral number\n");
 	fprintf(f, "  p  Print 'portably', that is as second with two fractional digits\n");
 	fprintf(f, "\n");
 	fprintf(f, "Format Specifiers:\n");
@@ -306,46 +306,39 @@ static void print_bytes_h(FILE* f, uint64_t bytes) {
 	if(bytes < 1000ull) {
 		fprintf(f, "  %3u B", (unsigned)(bytes));
 	} else if(bytes < 10240ull) {
-		fprintf(f, "%.2f KiB", bytes / 1024.0);
+		fprintf(f, "%.3f KiB", bytes / 1024.0);
 	} else if(bytes < 102400ull) {
-		fprintf(f, "%.1f KiB", bytes / 1024.0);
+		fprintf(f, "%.2f KiB", bytes / 1024.0);
 	} else if(bytes < 1024000ull) {
-		fprintf(f, "%.0f KiB", bytes / 1024.0);
+		fprintf(f, "%.1f KiB", bytes / 1024.0);
 	} else if(bytes < 10485760ull) {
-		fprintf(f, "%.2f MiB", bytes / 1048576.0);
+		fprintf(f, "%.3f MiB", bytes / 1048576.0);
 	} else if(bytes < 104857600ull) {
-		fprintf(f, "%.1f MiB", bytes / 1048576.0);
+		fprintf(f, "%.2f MiB", bytes / 1048576.0);
 	} else if(bytes < 1048576000ull) {
-		fprintf(f, "%.0f MiB", bytes / 1048576.0);
+		fprintf(f, "%.1f MiB", bytes / 1048576.0);
 	} else if(bytes < 10737418240ull) {
-		fprintf(f, "%.2f GiB", bytes / 1073741824.0);
+		fprintf(f, "%.3f GiB", bytes / 1073741824.0);
 	} else if(bytes < 107374182400ull) {
-		fprintf(f, "%.1f GiB", bytes / 1073741824.0);
+		fprintf(f, "%.2f GiB", bytes / 1073741824.0);
 	} else if(bytes < 1073741824000ull) {
-		fprintf(f, "%.0f GiB", bytes / 1073741824.0);
+		fprintf(f, "%.1f GiB", bytes / 1073741824.0);
 	} else if(bytes < 10995116277760ull) {
-		fprintf(f, "%.2f TiB", bytes / 1099511627776.0);
+		fprintf(f, "%.3f TiB", bytes / 1099511627776.0);
 	} else if(bytes < 109951162777600ull) {
-		fprintf(f, "%.1f TiB", bytes / 1099511627776.0);
+		fprintf(f, "%.2f TiB", bytes / 1099511627776.0);
 	} else if(bytes < 1099511627776000ull) {
-		fprintf(f, "%.0f TiB", bytes / 1099511627776.0);
+		fprintf(f, "%.1f TiB", bytes / 1099511627776.0);
 	} else if(bytes < 11258999068426240ull) {
-		fprintf(f, "%.2f PiB", bytes / 1125899906842624.0);
+		fprintf(f, "%.3f PiB", bytes / 1125899906842624.0);
 	} else if(bytes < 112589990684262400ull) {
-		fprintf(f, "%.1f PiB", bytes / 1125899906842624.0);
+		fprintf(f, "%.2f PiB", bytes / 1125899906842624.0);
 	} else if(bytes < 1125899906842624000ull) {
-		fprintf(f, "%.0f PiB", bytes / 1125899906842624.0);
+		fprintf(f, "%.1f PiB", bytes / 1125899906842624.0);
 	} else if(bytes < 11529215046068469760ull) {
-		fprintf(f, "%.2f EiB", bytes / 1152921504606846976.0);
+		fprintf(f, "%.3f EiB", bytes / 1152921504606846976.0);
 	} else {
-		bytes = bytes / 1152921504606846976.0 + 0.5;
-		uint64_t divisor = 1;
-		while(bytes / 1000 >= divisor) divisor *= 1000;
-		fprintf(f, "%" PRIu64 " ", bytes / divisor % 1000);
-		for(divisor /= 1000; divisor; divisor /= 1000) {
-			fprintf(f, "%03" PRIu64 " ", bytes / divisor % 1000);
-		}
-		fprintf(f, "EiB");
+		fprintf(f, "%.2f EiB", bytes / 1152921504606846976.0);
 	}
 }
 
