@@ -36,6 +36,7 @@ enum rc {
 	RC_SUCCESS,
 	RC_ARGUMENT_PARSING,
 	RC_COMMAND_NOT_FOUND,
+	RC_OUTPUT_FILE,
 	RC_SPAWN,
 	RC_WAIT,
 	RC_RUSAGE,
@@ -46,12 +47,14 @@ enum rc {
 static struct {
 	char const* name;
 	char const* format;
+	FILE* output;
 	bool help, version;
 } opts = {
 	.name = "timer",
 	.format = "\nreal %r\nuser %u\nsys  %s\nmem  %R\n",
 	.help = false,
-	.version = false
+	.output = NULL, // stdout is not constant
+	.version = false,
 };
 
 static char const* const portable_format = "real %pr\nuser %pu\nsys %ps\n";
@@ -68,6 +71,10 @@ static char const* const complete_format = "\n"
 ;
 
 static bool parse_opts(int* argc, char** argv) {
+	opts.output = stdout;
+	bool output_is_file = false;
+	bool auto_newline = true;
+
 	if(*argc > 0 && argv[0][0]) opts.name = argv[0];
 	int to = 0;
 	bool stop = false;
@@ -79,32 +86,56 @@ static bool parse_opts(int* argc, char** argv) {
 					stop = true;
 				} else if(strcmp("complete", arg + 2) == 0) {
 					opts.format = complete_format;
+					auto_newline = true;
 				} else if(strcmp("format", arg + 2) == 0) {
 					if(++from >= *argc) return false;
 					opts.format = argv[from];
+					auto_newline = false;
 				} else if(strcmp("help", arg + 2) == 0) {
 					opts.help = true;
+				} else if(strcmp("output", arg + 2) == 0) {
+					if(++from >= *argc) return false;
+					opts.output = fopen(argv[from], "w");
+					output_is_file = true;
 				} else if(strcmp("portability", arg + 2) == 0) {
 					opts.format = portable_format;
+					auto_newline = false;
+				} else if(strncmp("std", arg + 2, 3) == 0) {
+					if(strcmp("err", arg + 5) == 0) {
+						opts.output = stderr;
+						output_is_file = false;
+					} else if(strcmp("out", arg + 5) == 0) {
+						opts.output = stdout;
+						output_is_file = false;
+					} else return false;
 				} else if(strcmp("version", arg + 2) == 0) {
 					opts.version = true;
 				} else return false;
 			} else if(arg[1] == 'c') {
 				if(arg[2] == '\0') {
 					opts.format = complete_format;
+					auto_newline = true;
 				} else return false;
 			} else if(arg[1] == 'f') {
 				if(arg[2] == '\0') {
 					if(++from >= *argc) return false;
 					opts.format = argv[from];
+					auto_newline = false;
 				} else return false;
 			} else if(arg[1] == 'h') {
 				if(arg[2] == '\0') {
 					opts.help = true;
 				} else return false;
+			} else if(arg[1] == 'o') {
+				if(arg[2] == '\0') {
+					if(++from >= *argc) return false;
+					opts.output = fopen(argv[from], "w");
+					output_is_file = true;
+				} else return false;
 			} else if(arg[1] == 'p') {
 				if(arg[2] == '\0') {
 					opts.format = portable_format;
+					auto_newline = false;
 				} else return false;
 			} else if(arg[1] == 'v') {
 				if(arg[2] == '\0') {
@@ -115,6 +146,9 @@ static bool parse_opts(int* argc, char** argv) {
 			stop = true;
 			argv[to++] = arg;
 		}
+	}
+	if(auto_newline && output_is_file) {
+		opts.format += 1;
 	}
 	argv[to] = NULL;
 	*argc = to;
@@ -133,8 +167,11 @@ static void usage(FILE* f) {
 	fprintf(f, "  --                Stop parsing Arguments (useful to call commands whose name starts with '-')\n");
 	fprintf(f, "  -c --complete     Give a complete resource usage report\n");
 	fprintf(f, "  -f --format S     Use the format string S for the report\n");
-	fprintf(f, "  -h --help         Show this help, then exit\n");
 	fprintf(f, "  -p --portability  Use the portable format similar to that used by e.g. GNU time and bash time\n");
+	fprintf(f, "  -o --output F     Print output to the file F\n");
+	fprintf(f, "     --stdout       Print output to stdout (default)\n");
+	fprintf(f, "     --stderr       Print output to stderr\n");
+	fprintf(f, "  -h --help         Show this help, then exit\n");
 	fprintf(f, "  -v --version      Show version info (timer version " VERSION_STRING "), then exit\n");
 	fprintf(f, "\n");
 	fprintf(f, "Format Sequences:\n");
@@ -427,6 +464,9 @@ int main(int argc, char** argv) {
 	} else if(!check_format(opts.format)) {
 		fprintf(stderr, "The given format string is not a legal format string.\nUse '%s -h' for more information.\n", opts.name);
 		return RC_ARGUMENT_PARSING;
+	} else if(!opts.output) {
+		fprintf(stderr, "Could not open the requested output file for writing\n");
+		return RC_OUTPUT_FILE;
 	}
 
 	// The clang version used on OSX warns on `= {0}` for some idiotic reason
@@ -517,7 +557,7 @@ int main(int argc, char** argv) {
 	resources.voluntary_ctxt_switches = ru_after.ru_nvcsw - ru_before.ru_nvcsw;
 	resources.involuntary_ctxt_switches = ru_after.ru_nivcsw - ru_before.ru_nivcsw;
 
-	resources_fprintf(stdout, opts.format, &resources);
+	resources_fprintf(opts.output, opts.format, &resources);
 
 	return rc;
 }
