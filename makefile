@@ -1,9 +1,9 @@
 NAME := timer
 PARAMS := 
 
-OPTIMIZE := -O3
+OPTIMIZE := -O3 -flto
 
-COMPILER := cc
+COMPILER := $(shell which musl-gcc >/dev/null 2>/dev/null && echo musl-gcc -static || echo cc)
 WERROR := -Werror
 OPTS := -std=c11 -Wall -Wextra -pedantic $(WERROR) -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE=700 -D_DARWIN_C_SOURCE $(OPTIMIZE)
 LIBS := 
