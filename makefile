@@ -10,7 +10,7 @@ LIBS :=
 
 SRC := $(shell find . -path ./obj -prune -o -name "'.?*'" -prune -o -iname \*.c -print)
 VERSION := $(shell echo "$$(git rev-list --count HEAD).$$(git rev-parse --short --verify HEAD)")
-DIRTY := $(shell if [[ -n "$$(git status --porcelain)" ]] ; then echo '.dirty' ; fi)
+DIRTY := $(shell if [ -n "$$(git status --porcelain)" ] ; then echo '.dirty' ; fi)
 OPTS += -DVERSION="$(VERSION)$(DIRTY)"
 
 clean : 
