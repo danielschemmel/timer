@@ -3,7 +3,8 @@ PARAMS :=
 
 OPTIMIZE := -O3 -flto
 
-COMPILER := $(shell which ${CCACHE-ccache} >/dev/null 2>/dev/null && echo ccache || true) $(shell which musl-gcc >/dev/null 2>/dev/null && echo musl-gcc -static || echo ${CC-cc})
+COMPILER := $(shell which $${CCACHE:-ccache} >/dev/null 2>/dev/null && echo $${CCACHE:-ccache}) \
+            $(shell which $${CC:-musl-gcc} >/dev/null 2>/dev/null && echo $${CC:-musl-gcc -static} || echo $${CC:-cc})
 WERROR := -Werror
 OPTS := -std=c11 -Wall -Wextra -pedantic $(WERROR) -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE=700 -D_DARWIN_C_SOURCE $(OPTIMIZE)
 LIBS := 
